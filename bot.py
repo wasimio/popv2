@@ -1,6 +1,7 @@
 import sys
 import asyncio
 from pathlib import Path
+import pyromod # Import pyromod before pyrogram
 from pyrogram import Client, __version__, idle
 from pyrogram.raw.all import layer
 import logging
@@ -29,33 +30,25 @@ logging.getLogger("imdbpy").setLevel(logging.ERROR)
 logging.getLogger("aiohttp").setLevel(logging.ERROR)
 
 async def Lazy_start():
-    # 1. Start Web Server immediately to satisfy Heroku's PORT check
-    print(f"Starting Web Server on port {PORT}...")
-    try:
-        app = web.AppRunner(await web_server())
-        await app.setup()
-        await web.TCPSite(app, "0.0.0.0", PORT).start()
-        logging.info(f"Web server successfully started on port {PORT}")
-    except Exception as e:
-        logging.error(f"Failed to start web server: {e}")
-
     print('Initalizing The Movie Provider Bot...')
     try:
         await LazyPrincessBot.start()
+        logging.info("Bot started successfully!")
     except Exception as e:
         logging.critical(f"Bot failed to start: {e}")
         return
 
     bot_info = await LazyPrincessBot.get_me()
     LazyPrincessBot.username = bot_info.username
-    await initialize_clients()
     
-    # Plugins are automatically loaded by Pyrogram via the plugins config in LazyPrincessXBot
+    print("Initializing Multi-Clients...")
+    await initialize_clients()
     
     if ON_HEROKU:
         asyncio.create_task(ping_server())
         
     try:
+        print("Ensuring Database Indexes...")
         b_users, b_chats = await db.get_banned()
         temp.BANNED_USERS = b_users
         temp.BANNED_CHATS = b_chats
@@ -69,10 +62,19 @@ async def Lazy_start():
     temp.B_NAME = me.first_name
     LazyPrincessBot.username = '@' + me.username
     
-    logging.info(f"{me.first_name} with for Pyrogram v{__version__} (Layer {layer}) started on {me.username}.")
-    logging.info(LOG_STR)
-    logging.info(script.LOGO)
+    logging.info(f"{me.first_name} with Pyrogram v{__version__} (Layer {layer}) started on {me.username}.")
     
+    # Optional Web Server for Streaming (Won't block startup in worker mode)
+    if PORT:
+        print(f"Starting optional Web Server on port {PORT}...")
+        try:
+            app = web.AppRunner(await web_server())
+            await app.setup()
+            await web.TCPSite(app, "0.0.0.0", PORT).start()
+            logging.info(f"Web server started on port {PORT}")
+        except Exception as e:
+            logging.error(f"Could not start web server: {e}")
+
     tz = pytz.timezone('Asia/Kolkata')
     today = date.today()
     now = datetime.now(tz)
