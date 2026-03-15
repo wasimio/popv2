@@ -30,61 +30,81 @@ logging.getLogger("imdbpy").setLevel(logging.ERROR)
 logging.getLogger("aiohttp").setLevel(logging.ERROR)
 
 async def Lazy_start():
-    print('Initalizing The Movie Provider Bot...')
+    print("--- BOT STARTUP SEQUENCE INITIATED ---")
+    
+    # 1. Start the Bot Core
+    print("Step 1: Starting LazyPrincessBot...")
     try:
         await LazyPrincessBot.start()
-        logging.info("Bot started successfully!")
+        print("✅ SUCCESS: LazyPrincessBot is online!")
     except Exception as e:
-        logging.critical(f"Bot failed to start: {e}")
+        print(f"❌ CRITICAL ERROR: Bot failed to start: {e}")
         return
 
-    bot_info = await LazyPrincessBot.get_me()
-    LazyPrincessBot.username = bot_info.username
-    
-    print("Initializing Multi-Clients...")
-    await initialize_clients()
-    
-    if ON_HEROKU:
-        asyncio.create_task(ping_server())
-        
+    # 2. Get Me
     try:
-        print("Ensuring Database Indexes...")
+        bot_info = await LazyPrincessBot.get_me()
+        LazyPrincessBot.username = bot_info.username
+        print(f"✅ SUCCESS: Logged in as @{bot_info.username}")
+    except Exception as e:
+        print(f"❌ ERROR: Could not get bot info: {e}")
+
+    # 3. Initialize Multi-Clients
+    print("Step 2: Initializing Multi-Clients...")
+    try:
+        await initialize_clients()
+        print("✅ SUCCESS: Multi-clients initialized.")
+    except Exception as e:
+        print(f"⚠️ WARNING: Multi-client initialization failed: {e}")
+    
+    # 4. Database Setup
+    print("Step 3: Connecting to Database & Fetching Banned List...")
+    try:
         b_users, b_chats = await db.get_banned()
         temp.BANNED_USERS = b_users
         temp.BANNED_CHATS = b_chats
+        print("Step 4: Ensuring Database Indexes...")
         await Media.ensure_indexes()
+        print("✅ SUCCESS: Database setup complete.")
     except Exception as e:
-        logging.warning(f"Database initialization error: {e}")
-    
+        print(f"❌ ERROR: Database setup failed: {e}")
+
+    # 5. Global Temp Variables
     me = await LazyPrincessBot.get_me()
     temp.ME = me.id
     temp.U_NAME = me.username
     temp.B_NAME = me.first_name
     LazyPrincessBot.username = '@' + me.username
     
-    logging.info(f"{me.first_name} with Pyrogram v{__version__} (Layer {layer}) started on {me.username}.")
+    logging.info(f"Bot v{__version__} started on {me.username}.")
+
+    # 6. Optional Keep-Alive (Only on Heroku)
+    if ON_HEROKU:
+        print("Step 5: Starting Keep-Alive Task...")
+        asyncio.create_task(ping_server())
     
-    # Optional Web Server for Streaming (Won't block startup in worker mode)
+    # 7. Optional Web Server (Non-blocking)
     if PORT:
-        print(f"Starting optional Web Server on port {PORT}...")
+        print(f"Step 6: Attempting to start Web Server on port {PORT}...")
         try:
             app = web.AppRunner(await web_server())
             await app.setup()
             await web.TCPSite(app, "0.0.0.0", PORT).start()
-            logging.info(f"Web server started on port {PORT}")
+            print(f"✅ SUCCESS: Web server live on port {PORT}")
         except Exception as e:
-            logging.error(f"Could not start web server: {e}")
+            print(f"⚠️ WARNING: Web server failed: {e}")
 
-    tz = pytz.timezone('Asia/Kolkata')
-    today = date.today()
-    now = datetime.now(tz)
-    time = now.strftime("%H:%M:%S %p")
-    
+    # 8. Startup Notification
     try:
-        await LazyPrincessBot.send_message(chat_id=LOG_CHANNEL, text=script.RESTART_TXT.format(today, time))
+        tz = pytz.timezone('Asia/Kolkata')
+        now = datetime.now(tz)
+        time_str = now.strftime("%H:%M:%S %p")
+        await LazyPrincessBot.send_message(chat_id=LOG_CHANNEL, text=script.RESTART_TXT.format(date.today(), time_str))
+        print("✅ SUCCESS: Startup message sent to LOG_CHANNEL.")
     except Exception as e:
-        logging.warning(f"Could not send startup message to LOG_CHANNEL: {e}")
-        
+        print(f"⚠️ WARNING: Could not send startup message: {e}")
+
+    print("--- BOT IS NOW FULLY IDLE AND LISTENING ---")
     await idle()
 
 
